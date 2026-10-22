@@ -1,0 +1,84 @@
+# ==============================================================================
+# WartaKarsa - CasaOS & Docker Compose Deployment with PostgreSQL
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  # 1. PostgreSQL Database Service with Persistent Volume
+  postgres:
+    image: postgres:16-alpine
+    container_name: wartakarsa-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wartakarsa_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: wartakarsa_password
+    volumes:
+      - wartakarsa_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d wartakarsa_db"]
+      interval: 4s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    ports:
+      - "5432:5432"
+    networks:
+      - wartakarsa-net
+
+  # 2. WartaKarsa Web Application Service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wartakarsa-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # PostgreSQL Connection Strings & Parameters
+      DATABASE_URL: postgres://postgres:wartakarsa_password@postgres:5432/wartakarsa_db
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: wartakarsa_password
+      PGDATABASE: wartakarsa_db
+      # Optional: set to 'true' if you do not want initial sample seed at all
+      DISABLE_AUTO_SEED: "false"
+    volumes:
+      # Data directory mirror for uploads & persistent storage backup
+      - wartakarsa_appdata:/app/data
+    ports:
+      - "3000:3000"
+    networks:
+      - wartakarsa-net
+
+networks:
+  wartakarsa-net:
+    driver: bridge
+
+volumes:
+  wartakarsa_pgdata:
+    name: wartakarsa_pgdata
+  wartakarsa_appdata:
+    name: wartakarsa_appdata
+
+# CasaOS AppStore Configuration Metadata
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: app
+  description:
+    en_us: Platform terpadu publikasi kegiatan, galeri dokumentasi foto, dan jurnal aktivitas terstruktur dengan database PostgreSQL permanen.
+  tagline:
+    en_us: Dashboard Publikasi Kegiatan & Jurnal
+  developer: WartaKarsa
+  author: AI Studio
+  icon: https://raw.githubusercontent.com/yodestawibowo/rmb2/main/public/assets/aistudio/image_df827d5b.png
+  category: Utilities
+  port_map: "3000"
